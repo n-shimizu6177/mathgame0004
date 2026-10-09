@@ -317,7 +317,16 @@
       </select>
       <button class="btn btn-solo" onclick="assignTeamsAuto()" style="margin:0; width:auto; padding:8px 12px; font-size:14px;">🎲 チーム自動分け</button>
     </div>
+    <!-- 教員画面（hostScreen）内 -->
+      <div style="margin: 15px 0; background: #f8f9fa; padding: 12px; border-radius: 8px;">
+       <label for="questionCountInput" style="font-weight: bold; margin-right: 8px;">
+         📝 1回の対戦で出す問題数:
+       </label>
+       <input type="number" id="questionCountInput" value="10" min="1" max="50" style="width: 80px; padding: 6px; font-size: 16px; text-align: center;"> 問
+      </div>
 
+    <button class="btn btn-primary" onclick="startGameFromHost()">ゲーム開始</button>
+    
     <button class="btn" onclick="startHostGame()" style="background-color: #2196F3; margin-bottom: 12px;">🚀 対戦一斉スタート (全5問)</button>
     
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
@@ -777,6 +786,31 @@
     return shuffledQ;
   }
 
+  function startGameFromHost() {
+  if (leaderboard.length === 0) {
+    alert("参加者がいません。");
+    return;
+  }
+
+  // 入力された出題数を取得（デフォルト10問）
+  const countInput = document.getElementById('questionCountInput');
+  const questionCount = countInput ? parseInt(countInput.value, 10) || 10 : 10;
+
+  // 問題リストから指定された数だけランダムに抽出
+  const shuffled = [...questions].sort(() => Math.random() - 0.5);
+  const selectedQuestions = shuffled.slice(0, questionCount);
+
+  // 全生徒へ「ゲーム開始信号」と「今回使う問題リスト」を送信
+  studentConns.forEach(conn => {
+    conn.send({
+      type: 'start_game',
+      questions: selectedQuestions
+    });
+  });
+
+  // ホスト自身の画面も進行状態へ切り替え
+  // ... (既存のホスト画面遷移処理)
+}
   function navigateTo(screenId) {
     if (timerInterval) clearInterval(timerInterval);
     const screens = document.querySelectorAll('.screen');
@@ -1171,8 +1205,29 @@
       }
     }, 1500);
   }
+// 生徒側：クイズの進捗判定箇所
+function checkAnswer(selectedIndex) {
+  // ...正誤判定処理...
 
+  currentQuestionIndex++;
+
+  // 固定値ではなく、受け取った出題数（activeQuestions.length）で終了チェック
+  if (currentQuestionIndex >= activeQuestions.length) {
+    finishGame(); // 規定問題数に達したら終了
+  } else {
+    showQuestion();
+  }
+}
+
+ // 終了画面の表示用（正答率などの表示）
   function finishGame() {
+   // 例: 「10問中8問正解」を「activeQuestions.length」に対応させる
+  const totalCount = activeQuestions.length;
+  document.getElementById('resultScoreDisplay').innerText = 
+    `${myScore}点 (${totalCount}問中${correctAnswersCount}問正解)`;
+  
+  // ...結果送信処理...
+
     navigateTo('resultScreen');
 
     document.getElementById('breakdownTeam').innerText = myTeam;
