@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一斉数学対戦アプリ</title>
+
+  <!-- MathJax -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+
+  <!-- PeerJS SDK -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+  <style>
+    :root {
+      --primary-color: #3f51b5;
+      --bg-color: #f9f9f9;
+      --card-bg: #ffffff;
+      --text-color: #333333;
+    }
+
+    body {
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      box-sizing: border-box;
+    }
+
+    h1, h2, h3 { text-align: center; color: var(--primary-color); margin-top: 0; }
+    
+    .screen { display: none !important; }
+    .screen.active { display: block !important; }
+
+    .input-group { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 14px; }
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%; padding: 10px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    .btn {
+      width: 100%; padding: 12px; font-size: 16px; font-weight: bold; color: #fff;
+      background-color: var(--primary-color); border: none; border-radius: 6px; cursor: pointer; margin-top: 8px; box-sizing: border-box;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background-color: #757575; }
+    .btn-solo { background-color: #4caf50; }
+    .btn-host { background-color: #ff9800; }
+    .btn-danger { background-color: #f44336; }
+
+    /* 選択肢グリッドとボタンのスタイル */
+    .options-grid { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 12px; 
+      margin-top: 16px; 
+    }
+    
+    .option-btn {
+      padding: 20px 12px;           /* パディングを広げてボタン自体を大きく */
+      min-height: 80px;             /* ボタンの最小高さを確保 */
+      font-size: 20px;              /* テキストのベースサイズを拡大 */
+      font-weight: bold; 
+      background-color: #f0f0f0;
+      border: 2px solid #ccc; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+    
+    /* 選択肢内のMathJax（分数など）が小さく縮小されるのを防ぐ設定 */
+    .option-btn mjx-container {
+      font-size: 115% !important;  /* 数式表示を通常より拡大 */
+    }
+
+    .option-btn:hover { background-color: #e0e0e0; }
+    .option-btn.correct { background-color: #4caf50 !important; color: white !important; border-color: #388e3c !important; }
+    .option-btn.wrong { background-color: #f44336 !important; color: white !important; border-color: #d32f2f !important; }
+
+    .question-box {
+      background-color: #f0f4f8; border-left: 5px solid var(--primary-color);
+      padding: 14px; font-size: 17px; margin-bottom: 16px; min-height: 60px;
+    }
+
+    .timer-container {
+      width: 100%; background-color: #e0e0e0; border-radius: 8px; height: 16px; margin-bottom: 12px; overflow: hidden;
+    }
+    .timer-bar {
+      height: 100%; background-color: #ff9800; width: 100%; transition: width 0.1s linear, background-color 0.3s;
+    }
+
+    .feedback-banner {
+      padding: 10px; text-align: center; font-weight: bold; font-size: 16px; border-radius: 6px; margin-bottom: 12px; display: none;
+    }
+    .feedback-banner.correct { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; display: block; }
+    .feedback-banner.wrong { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; display: block; }
+
+    .score-breakdown {
+      background: #f5f5f5; border-radius: 8px; padding: 14px; margin: 16px 0; border: 1px solid #e0e0e0;
+    }
+    .score-breakdown-row {
+      display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #ccc; font-size: 15px;
+    }
+    .score-breakdown-row:last-child { border-bottom: none; font-weight: bold; font-size: 18px; color: var(--primary-color); }
+
+    .ranking-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .ranking-table th, .ranking-table td { border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 14px; }
+    .ranking-table th { background-color: var(--primary-color); color: white; }
+
+    .q-edit-card { border: 1px solid #ddd; background: #fafafa; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .q-edit-options { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .excel-import-box { background: #eef2ff; border: 2px dashed #3f51b5; padding: 14px; border-radius: 8px; margin-bottom: 16px; }
+    .team-badge { display: inline-block; padding: 4px 8px; background: #e0f2fe; color: #0369a1; font-weight: bold; border-radius: 4px; font-size: 13px; }
+    .status-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .status-playing { background: #fff3cd; color: #856404; }
+    .status-finished { background: #d4edda; color: #155724; }
+    .error-msg { color: red; font-size: 13px; margin-top: 6px; display: none; }
+    
+    .team-setting-box {
+      background: #f0f4f8; padding: 10px; border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+
+    /* プレビュー表示用スタイル */
+    .preview-box {
+      background-color: #ffffff;
+      border: 1px solid #bbdefb;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+    .preview-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #1976d2;
+      margin-bottom: 4px;
+    }
+    .preview-q-text {
+      font-size: 15px;
+      background: #f0f4f8;
+      padding: 8px;
+      border-radius: 4px;
+      border-left: 3px solid #3f51b5;
+      margin-bottom: 6px;
+    }
+    .preview-options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .preview-opt-item {
+      background: #f5f5f5;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      border: 1px solid #e0e0e0;
+      text-align: center;
+    }
+    .preview-opt-item.is-correct {
+      border-color: #4caf50;
+      background: #e8f5e9;
+      font-weight: bold;
+      color: #2e7d32;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 1. エントリー画面 -->
+  <div id="entryScreen" class="screen active">
+    <h1>2年生一斉！小問完全攻略バトル</h1>
+    
+    <div class="input-group">
+      <label for="playerName">名前</label>
+      <input type="text" id="playerName" placeholder="例：山田太郎">
+    </div>
+
+    <div class="input-group">
+      <label for="classSelect">クラス</label>
+      <select id="classSelect">
+        <option value="1組">1組</option><option value="2組">2組</option>
+        <option value="3組">3組</option><option value="4組">4組</option>
+        <option value="5組">5組</option><option value="6組">6組</option><option value="7組">7組</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label for="roomId">ルームID（教員が指定したID）</label>
+      <input type="text" id="roomId" value="math2026">
+    </div>
+
+    <button class="btn" onclick="joinLobby()">対戦ロビーに参加する</button>
+    <button class="btn btn-solo" onclick="startSoloMode()">一人で練習する (ソロ)</button>
+    <hr style="margin: 16px 0;">
+    <button class="btn btn-host" onclick="navigateTo('hostAuthScreen')">教員用管理画面へ</button>
+  </div>
+
+  <!-- 2. 教員ログイン画面 -->
+  <div id="hostAuthScreen" class="screen">
+    <h2>教員用管理画面 ログイン</h2>
+    <div class="input-group">
+      <label for="hostPasswordInput">パスワードを入力してください</label>
+      <input type="password" id="hostPasswordInput" placeholder="パスワード">
+      <p id="authErrorMessage" class="error-msg">パスワードが間違っています</p>
+    </div>
+    <button class="btn" onclick="verifyHostPassword()">ログイン</button>
+    <button class="btn btn-secondary" onclick="navigateTo('entryScreen')">戻る</button>
+  </div>
+
+  <!-- 3. 生徒ロビー画面 -->
+  <div id="lobbyScreen" class="screen">
+    <h2>対戦待機ロビー</h2>
+    <p style="text-align:center;">接続状況: <strong id="studentStatus" style="color:orange;">教員の準備を待っています...</strong></p>
+    <p style="text-align:center; font-size:16px;">所属チーム: <span id="myTeamDisplay" class="team-badge">未割り当て</span></p>
+    <p style="text-align: center; color: #666; font-size:14px;">※ホスト（教員）がチーム分けと試合開始を行うまでお待ちください。</p>
+    <button class="btn btn-secondary" onclick="resetToTop()">退出して戻る</button>
+  </div>
+
+  <!-- 4. クイズ対戦画面 -->
+  <div id="quizScreen" class="screen">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom:8px;">
+      <span id="questionProgress" style="font-weight:bold;">第 1 / 5 問</span>
+      <span id="quizTeamDisplay" class="team-badge">チーム未定</span>
+      <span id="timerText" style="font-weight:bold; color:#ff9800;">残り時間: 100.0秒</span>
+    </div>
+    
+    <div class="timer-container">
+      <div id="timerBar" class="timer-bar"></div>
+    </div>
+
+    <div id="feedbackBanner" class="feedback-banner"></div>
+
+    <div class="question-box" id="questionText">問題文</div>
+    <div class="options-grid" id="optionsContainer"></div>
+  </div>
+
+  <!-- 5. 結果画面 -->
+  <div id="resultScreen" class="screen">
+    <h2>対戦結果</h2>
+    
+    <div class="score-breakdown">
+      <div class="score-breakdown-row">
+        <span>所属チーム</span>
+        <span id="breakdownTeam" class="team-badge">チームA</span>
+      </div>
+      <div class="score-breakdown-row">
+        <span>正解数</span>
+        <span id="breakdownCorrectCount">0 / 0 問</span>
+      </div>
+      <div class="score-breakdown-row">
+        <span>正解基礎点 (+100pt/問)</span>
+        <span id="breakdownBaseScore">0 pt</span>
+      </div>
+      <div class="score-breakdown-row">
+        <span>タイムボーナス</span>
+        <span id="breakdownTimeBonus">0 pt</span>
+      </div>
+      <div class="score-breakdown-row">
+        <span>個人合計スコア</span>
+        <span id="breakdownTotalScore">0 pt</span>
+      </div>
+    </div>
+
+    <h3>🏆 チーム対抗ランキング</h3>
+    <table class="ranking-table">
+      <thead><tr><th>順位</th><th>チーム名</th><th>人数</th><th>チーム平均点</th></tr></thead>
+      <tbody id="teamRankingBody"></tbody>
+    </table>
+
+    <h3 style="margin-top:20px;">👤 個人順位</h3>
+    <table class="ranking-table">
+      <thead><tr><th>順位</th><th>名前</th><th>チーム</th><th>スコア</th></tr></thead>
+      <tbody id="rankingBody"></tbody>
+    </table>
+
+    <button class="btn" onclick="returnToLobby()" style="margin-top: 16px;">🏠 ロビーに戻って次の試合を待つ</button>
+  </div>
+
+  <!-- 6. ホスト（教員）管理画面 -->
+  <div id="hostScreen" class="screen">
+    <h2>教員用管理画面 (ホスト)</h2>
+    <p style="text-align:center;">
+      ルームID: <strong id="hostDisplayRoomId">math2026</strong> | 参加者: <strong id="hostParticipantCount">0</strong> 人<br>
+      <span style="font-size:14px; color:#2e7d32; font-weight:bold;">対戦完了: <span id="hostFinishedCount">0</span> / <span id="hostTotalCount">0</span> 人</span>
+    </p>
+
+    <!-- チーム人数調整設定バー -->
+    <div class="team-setting-box">
+      <label for="teamSizeSelect" style="margin:0; font-size:14px; white-space:nowrap;">1チームの目標人数:</label>
+      <select id="teamSizeSelect" style="width: auto; padding:6px; margin:0;">
+        <option value="3">3名程度</option>
+        <option value="4">4名程度</option>
+        <option value="5">5名程度</option>
+        <option value="6" selected>6名程度</option>
+        <option value="7">7名程度</option>
+        <option value="8">8名程度</option>
+        <option value="9">9名程度</option>
+        <option value="10">10名程度</option>
+      </select>
+      <button class="btn btn-solo" onclick="assignTeamsAuto()" style="margin:0; width:auto; padding:8px 12px; font-size:14px;">🎲 チーム自動分け</button>
+    </div>
+
+    <button class="btn" onclick="startHostGame()" style="background-color: #2196F3; margin-bottom: 12px;">🚀 対戦一斉スタート (全5問)</button>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+      <button class="btn btn-secondary" onclick="toggleEditor(true)">📝 問題編集・Excelコピペ</button>
+      <button class="btn btn-secondary" onclick="exportQuestionsJSON()">📥 JSON書き出し</button>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importQuestionsJSON(event)">
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📤 JSON読み込み</button>
+    </div>
+
+    <h3>🏆 チーム中間状況</h3>
+    <table class="ranking-table">
+      <thead><tr><th>順位</th><th>チーム名</th><th>人数</th><th>チーム平均点</th></tr></thead>
+      <tbody id="hostTeamRankingBody"></tbody>
+    </table>
+
+    <h3 style="margin-top:16px;">👤 リアルタイム個人順位 & 進捗</h3>
+    <table class="ranking-table">
+      <thead><tr><th>順位</th><th>名前</th><th>チーム</th><th>スコア</th><th>状態</th><th>操作</th></tr></thead>
+      <tbody id="hostRankingBody"></tbody>
+    </table>
+
+    <button class="btn btn-secondary" onclick="resetToTop()" style="margin-top: 16px;">ログアウト・戻る</button>
+  </div>
+
+  <!-- 7. 問題編集画面 -->
+  <div id="editorScreen" class="screen">
+    <h2>問題セットの編集</h2>
+
+    <div class="excel-import-box">
+      <h3 style="margin-bottom:8px; font-size:16px; color:#3f51b5;">📊 Excel / スプレッドシートから一括流し込み</h3>
+      <p style="font-size:12px; color:#555; margin-top:0;">
+        Excelのセルを <strong>[問題文] [選択肢1] [選択肢2] [選択肢3] [選択肢4] [正解番号(1~4)]</strong> の順でコピーし、下に貼り付けてください。
+      </p>
+      <textarea id="excelPasteArea" placeholder="Excelのセル範囲をコピーしてここに貼り付け (Ctrl+V)&#10;例: 1+1は?	1	2	3	4	2"></textarea>
+      <button class="btn btn-solo" onclick="importFromExcelPaste()" style="margin-top:6px; font-size:14px; padding:8px;">一括取り込みを実行</button>
+    </div>
+
+    <hr style="margin: 20px 0;">
+
+    <div id="questionsEditorContainer"></div>
+    <button class="btn btn-solo" onclick="addNewQuestionField()">＋ 新しい問題を手動で追加</button>
+    <button class="btn" onclick="saveEditedQuestions()" style="margin-top: 8px;">保存して管理画面へ戻る</button>
+    <button class="btn btn-danger" onclick="resetDefaultQuestions()" style="margin-top: 8px; font-size:14px; padding:8px;">🔄 初期問題にリセット</button>
+    <button class="btn btn-secondary" onclick="toggleEditor(false)">キャンセル</button>
+  </div>
+
+</div>
+
+<script>
+  const HOST_PASSWORD = "teacher2026";
+  const QUESTION_TIME_LIMIT = 100;
+  const QUESTIONS_PER_GAME = 5;
+  const STORAGE_KEY = "math_app_questions_v1";
+
+  let peer = null;
+  let hostConn = null;
+  let studentConns = [];
+  let isHost = false;
+  let isSoloMode = false;
+  let retryTimer = null;
+
+  let myName = "";
+  let myClass = "";
+  let myTeam = "未割り当て";
+  let myRoomId = "";
+  let currentQuestionIndex = 0;
+  let activeQuestions = [];
+  
+  let correctAnswersCount = 0;
+  let baseScoreTotal = 0;
+  let timeBonusTotal = 0;
+  let myScore = 0;
+  let isAnsweringLocked = false;
+
+  let questionStartTime = 0;
+  let timerInterval = null;
+  let timeLeft = QUESTION_TIME_LIMIT;
+
+  let leaderboard = [];
+
+  const DEFAULT_QUESTIONS = [
+  {
+    "q": "【第1問】(式と証明)<br>\\((2x - 3y)(4x + 5y)\\) を展開しなさい。",
+    "options": [
+      "\\(8x^2 - 2xy - 15y^2\\)",
+      "\\(8x^2 + 2xy - 15y^2\\)",
+      "\\(8x^2 - 22xy - 15y^2\\)",
+      "\\(8x^2 - 15y^2\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第2問】(2次方程式)<br>2次方程式 \\(x^2 - 4x - 5 = 0\\) の解を求めよ。",
+    "options": [
+      "\\(x = -1, 5\\)",
+      "\\(x = 2, -3\\)",
+      "\\(x = 1, -5\\)",
+      "\\(x = -2, 3\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第3問】(式の計算)<br>\\((-2x^2 + 3x - 5)(4x^2 - 3x - 7)\\) を展開して整理したときの \\(x^2\\) の係数を求めよ。",
+    "options": [
+      "\\(-15\\)",
+      "\\(-5\\)",
+      "\\(3\\)",
+      "\\(25\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第4問】(三角関数)<br>\\(\\theta = \\frac{5}{6}\\pi\\) を度数法で表しなさい。",
+    "options": [
+      "\\(150^\\circ\\)",
+      "\\(120^\\circ\\)",
+      "\\(135^\\circ\\)",
+      "\\(210^\\circ\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第5問】(三角関数)<br>\\(\\sin^2 \\theta + \\cos^2 \\theta\\) の値として正しいものを評価せよ。",
+    "options": [
+      "\\(1\\)",
+      "\\(0\\)",
+      "\\(\\tan \\theta\\)",
+      "\\(-1\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第6問】(三角比)<br>\\(0^\\circ \\leq \\theta \\leq 180^\\circ\\)とする。\\(\\sin \\theta + \\cos \\theta = a\\)のとき，\\(\\sin \\theta \\cos \\theta\\)を\\(a\\)を用いて表すと？",
+    "options": [
+      "\\(\\frac{a^2 - 1}{2}\\)",
+      "\\(\\frac{1 - a^2}{2}\\)",
+      "\\(a^2 - 1\\)",
+      "\\(1 - a^2\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第7問】(確率)<br>\\(1\\)個のさいころを続けて\\(3\\)回投げるとき，\\(3\\)回とも\\(3\\)の倍数の目が出る確率を求めよ。",
+    "options": [
+      "\\(\\frac{1}{27}\\)",
+      "\\(\\frac{1}{6}\\)",
+      "\\(\\frac{1}{8}\\)",
+      "\\(\\frac{1}{18}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第8問】(データの分析)<br>\\(8\\)個の値からなるデータ\\(2, 3, 5, 8, 9, 10, 13, x\\)がある。\\(x = 4\\)のときの中央値を求めよ。",
+    "options": [
+      "\\(6.5\\)",
+      "\\(7\\)",
+      "\\(6\\)",
+      "\\(5.5\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第9問】(2次関数とグラフ)<br>\\(2\\)次関数\\(y = - x^2 + 6x + a\\)のグラフが点\\((1, 4)\\)を通るとき，定数\\(a\\)の値を求めよ。",
+    "options": [
+      "\\(- 1\\)",
+      "\\(1\\)",
+      "\\(2\\)",
+      "\\(- 2\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第10問】(図形と計量)<br>\\( \\triangle \\mathrm{ABC} \\)があり，\\( \\mathrm{AB} = 8, \\mathrm{AC} = 3, \\angle \\mathrm{BAC} = 60^\\circ\\)であるとき，\\(\\mathrm{BC}\\) を求めよ。",
+    "options": [
+      "\\(7\\)",
+      "\\(11\\)",
+      "\\(5\\)",
+      "\\(\\sqrt{10}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第11問】(場合の数)<br>男子3人，女子2人が1列に並ぶとき，女子2人が隣り合う並び方は何通りか。",
+    "options": [
+      "\\(48\\)",
+      "\\(12\\)",
+      "\\(24\\)",
+      "\\(60\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第12問】(確率)<br>赤玉4個，白玉3個が入った袋から同時に2個の玉を取り出すとき，2個とも赤玉である確率を求めよ。",
+    "options": [
+      "\\(\\frac{2}{7}\\)",
+      "\\(\\frac{6}{25}\\)",
+      "\\(\\frac{1}{3}\\)",
+      "\\(\\frac{4}{7}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第13問】(2次不等式)<br>不等式\\(x^2 - 3x - 10 > 0 \\) の解を求めよ。",
+    "options": [
+      "\\(x < -2, 5 < x\\)",
+      "\\(-2 < x < 5\\)",
+      "\\(-5 < x < 2\\)",
+      "\\(x < -5, 2 < x\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第14問】(複素数と方程式)<br>\\((2 + 3i)(3 - i)\\)を計算せよ。",
+    "options": [
+      "\\(9 + 7i\\)",
+      "\\(3 + 7i\\)",
+      "\\(9 + 11i\\)",
+      "\\(6 - 7i\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第15問】(場合の数)<br>袋の中に1~7の数字が書かれたカードが1枚ずつ合計7枚入っている。この袋の中から同時に3枚のカードを取り出すときの取り出し方は全部で何通りか。",
+    "options": [
+      "\\(35\\)",
+      "\\(42\\)",
+      "\\(210\\)",
+      "\\(70\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第16問】(因数分解)<br>\\(4x^2 - 25x + 36\\)を因数分解せよ。",
+    "options": [
+      "\\((4x - 9)(x - 4)\\)",
+      "\\((2x - 6)^2\\)",
+      "\\((2x - 4)(2x - 9)\\)",
+      "\\((4x - 6)(x - 6)\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第17問】(2次関数とグラフ)<br>2次関数\\(y = x^2 + 2ax + 3\\)のグラフの軸が直線\\(x = 2\\)であるとき，定数\\(a\\)の値を求めよ。",
+    "options": [
+      "\\(-2\\)",
+      "\\(-1\\)",
+      "\\(1\\)",
+      "\\(-\\frac{1}{2}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第18問】(確率)<br>赤玉4個，白玉3個の合計7個の玉が入った袋がある。この袋から1個ずつ3回玉を取り出す。ただし，取り出した玉はもとに戻さない。このとき，3回とも白玉を取り出す確率を求めよ。",
+    "options": [
+      "\\(\\frac{1}{35}\\)",
+      "\\(\\frac{3}{35}\\)",
+      "\\(\\frac{2}{21}\\)",
+      "\\(\\frac{2}{105}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第19問】(2次不等式)<br>2つの不等式\\(x^2 - 5x - 6 > 0\\)と\\(|x - 3| < 6\\)をともに満たす整数\\(x\\)の個数を求めよ。",
+    "options": [
+      "\\(3\\)",
+      "\\(1\\)",
+      "\\(2\\)",
+      "\\(4\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第20問】(平方根の計算)<br>\\(a = \\frac{5}{6 - \\sqrt{11}}\\)の分母を有理化せよ。",
+    "options": [
+      "\\(\\frac{6 + \\sqrt{11}}{5}\\)",
+      "\\(\\frac{6 - \\sqrt{11}}{5}\\)",
+      "\\(\\frac{5 + \\sqrt{11}}{6}\\)",
+      "\\(\\frac{5 - \\sqrt{11}}{6}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第21問】(絶対値)<br>\\(| \\sqrt{5} - 1 | + | \\sqrt{5} - 2 |\\) を計算せよ。",
+    "options": [
+      "\\(2\\sqrt{5} - 3\\)",
+      "\\(2\\sqrt{5} + 1\\)",
+      "\\(1\\)",
+      "\\(3\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第22問】(三角比)<br>\\(\\cos 60^\\circ \\) の値は？",
+    "options": [
+      "\\(\\frac{1}{2}\\)",
+      "\\(\\frac{\\sqrt{3}}{2}\\)",
+      "\\(\\frac{- 1}{2}\\)",
+      "\\(-\\frac{\\sqrt{3}}{2}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第23問】(2次関数とグラフ)<br>放物線\\(y = x^2\\)を\\(x\\)軸方向に\\(-2\\),\\(y\\)軸方向に\\(-2\\)だけ平行移動した放物線を表す2次関数を\\(y = f(x)\\)とするとき，\\(f(x)\\)を求めよ。",
+    "options": [
+      "\\(f(x) = x^2 + 4x - 6\\)",
+      "\\(f(x) = x^2 + 4x - 2\\)",
+      "\\(f(x) = x^2 - 2x + 4\\)",
+      "\\(f(x) = x^2 - 2x + 2\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第24問】(三角比)<br>\\((\\sin 60^\\circ + \\cos 60^\\circ)^2 + (\\sin 120^\\circ +\\cos 120^\\circ)^2\\)の値を求めよ。",
+    "options": [
+      "\\(2\\)",
+      "\\(1\\)",
+      "\\(-1\\)",
+      "\\(\\sqrt{2}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第25問】(2次関数とグラフ)<br>グラフが3点\\((0, -8), (5, 2), (6, -8)\\)を通る\\(x\\)の2次関数は？",
+    "options": [
+      "\\(y = -2x^2 + 12x -8\\)",
+      "\\(y = 2x^2 + 8x -10\\)",
+      "\\(y = x^2 - 6x + 5\\)",
+      "\\(y = -x^2 + 9x + 18\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第26問】(2次関数とグラフ)<br>2次関数\\(y = x^2 - 2x + 3a - 2\\)のグラフが\\(x\\)軸の正の部分と負の部分で交わっているとき，定数\\(a\\)の値の範囲を求めよ。",
+    "options": [
+      "\\(a < \\frac{2}{3}\\)",
+      "\\(a > \\frac{2}{3}\\)",
+      "\\(a \\leq \\frac{2}{3}\\)",
+      "\\(a \\geq \\frac{2}{3} \\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第27問】(確率)<br>赤玉5個，白玉3個，青玉2個の合計10個の玉が入った袋から，同時に3個の玉を取り出すとき，取り出した3個の玉の色が\\(\\textbf{すべて異なる}\\)確率を求めよ。",
+    "options": [
+      "\\(\\frac{1}{4}\\)",
+      "\\(\\frac{1}{6}\\)",
+      "\\(\\frac{2}{7}\\)",
+      "\\(\\frac{1}{2}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第28問】(確率)<br>赤玉5個，白玉3個，青玉2個の合計10個の玉が入った袋から，同時に3個の玉を取り出すとき，取り出した3個の玉の色が\\(\\textbf{すべて同じである}\\)確率を求めよ。",
+    "options": [
+      "\\(\\frac{11}{120}\\)",
+      "\\(\\frac{2}{105}\\)",
+      "\\(\\frac{5}{81}\\)",
+      "\\(\\frac{2}{5}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第29問】(データ)<br>6人の小テストの結果のデータ\\(3, 4, 6, 7, 7, 9\\)（点）の分散を求めよ。",
+    "options": [
+      "\\(4\\)",
+      "\\(1\\)",
+      "\\(2\\)",
+      "\\(3\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第30問】(データ)<br>6人の小テストの結果のデータ\\(3, 4, 6, 7, 7, 9\\)（点）の標準偏差を求めよ。",
+    "options": [
+      "\\(2\\)",
+      "\\(10\\)",
+      "\\(-2\\)",
+      "\\(14\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第31問】(図形)<br>\\(\\triangle \\mathrm{ABC}\\)において，\\(b = 5, \\mathit{B} = 30^\\circ, \\mathit{C} = 45^\\circ \\)のとき，\\(c\\)を求めよ。",
+    "options": [
+      "\\(5\\sqrt{2}\\)",
+      "\\(4\\)",
+      "\\(2\\sqrt{3}\\)",
+      "\\(3\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第32問】(図形)<br>\\(\\triangle \\mathrm{ABC}\\)において，\\(b = 5, \\mathit{B} = 30^\\circ, \\mathit{C} = 45^\\circ \\)のとき，外接円の半径\\(\\mathit{R}\\)を求めよ。",
+    "options": [
+      "\\(5\\)",
+      "\\(4\\)",
+      "\\(8\\)",
+      "\\(2\\sqrt{2}\\)"
+    ],
+    "answer": 0
+  },
+  {
+    "q": "【第33問】(図形)<br>\\(\\triangle \\mathrm{ABC}\\)において，\\(a = 3, b = 5, \\mathit{C} = 150^\\circ\\)のとき，この三角形の面積を求めよ。",
+    "options": [
+      "\\(\\frac{15}{4}\\)",
+      "\\(\\frac{9}{2}\\)",
+      "\\(\\frac{3}{20}\\)",
+      "\\(5\\)"
+    ],
+    "answer": 0
+  }
+  ];
+
+  let questions = JSON.parse(JSON.stringify(DEFAULT_QUESTIONS));
+
+  function saveToLocalStorage() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(questions)); } catch (e) {}
+  }
+
+  function loadFromLocalStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) questions = parsed;
+      }
+    } catch (e) {}
+  }
+
+  function resetDefaultQuestions() {
+    if (confirm("問題を初期状態にリセットしますか？")) {
+      questions = JSON.parse(JSON.stringify(DEFAULT_QUESTIONS));
+      localStorage.removeItem(STORAGE_KEY);
+      renderEditorFields();
+      alert("初期状態にリセットしました。");
+    }
+  }
+
+  function shuffleArray(array) {
+    let clone = JSON.parse(JSON.stringify(array));
+    for (let i = clone.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [clone[i], clone[j]] = [clone[j], clone[i]];
+    }
+    return clone;
+  }
+
+  function generateGameQuestions(baseQuestions, count) {
+    let shuffledQ = shuffleArray(baseQuestions).slice(0, count);
+    shuffledQ.forEach(q => {
+      let correctOptionText = q.options[q.answer];
+      q.options = shuffleArray(q.options);
+      q.answer = q.options.indexOf(correctOptionText);
+    });
+    return shuffledQ;
+  }
+
+  function navigateTo(screenId) {
+    if (timerInterval) clearInterval(timerInterval);
+    const screens = document.querySelectorAll('.screen');
+    screens.forEach(s => s.classList.remove('active'));
+    const target = document.getElementById(screenId);
+    if (target) target.classList.add('active');
+    updateMathJax();
+  }
+
+  function resetToTop() {
+    if (retryTimer) clearTimeout(retryTimer);
+    if (peer) { peer.destroy(); peer = null; }
+    window.location.href = window.location.pathname;
+  }
+
+  function returnToLobby() {
+    if (isSoloMode) {
+      resetToTop();
+    } else {
+      navigateTo('lobbyScreen');
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    loadFromLocalStorage();
+    navigateTo('entryScreen');
+  });
+
+  function updateMathJax() {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise().catch(err => console.log(err));
+    }
+  }
+
+  // --- 教員 (ホスト) 処理 ---
+  function verifyHostPassword() {
+    const pass = document.getElementById('hostPasswordInput').value;
+    if (pass === HOST_PASSWORD) {
+      const roomIdInput = document.getElementById('roomId');
+      myRoomId = (roomIdInput && roomIdInput.value) ? roomIdInput.value.trim() : "math2026";
+      document.getElementById('hostDisplayRoomId').innerText = myRoomId;
+      document.getElementById('authErrorMessage').style.display = 'none';
+      isHost = true;
+      initHostPeer();
+      navigateTo('hostScreen');
+    } else {
+      document.getElementById('authErrorMessage').style.display = 'block';
+    }
+  }
+
+  function initHostPeer() {
+    if (peer) peer.destroy();
+    peer = new Peer("host-" + myRoomId);
+
+    peer.on('connection', (conn) => {
+      studentConns = studentConns.filter(c => c.peer !== conn.peer);
+      studentConns.push(conn);
+
+      conn.on('data', (data) => {
+        if (data.type === 'join') {
+          // IDまたは同姓同名で既存ユーザーを検索（再進入時の重複を防止）
+          let user = leaderboard.find(u => u.id === conn.peer || u.name === data.name);
+          if (!user) {
+            leaderboard.push({ 
+              id: conn.peer, 
+              name: data.name, 
+              class: data.class, 
+              team: "未割り当て", 
+              score: 0, 
+              isFinished: false, 
+              correctCount: 0 
+            });
+          } else {
+            // 既存データを最新の接続情報で上書き
+            user.id = conn.peer;
+            user.name = data.name;
+            user.class = data.class;
+          }
+          updateHostUI();
+          broadcastRanking();
+        } else if (data.type === 'score_update') {
+          let user = leaderboard.find(u => u.id === conn.peer);
+          if (user) {
+            user.score = data.score;
+            if (data.isFinished !== undefined) user.isFinished = data.isFinished;
+            if (data.correctCount !== undefined) user.correctCount = data.correctCount;
+          }
+          updateHostUI();
+          broadcastRanking();
+        }
+      });
+
+      conn.on('close', () => {
+        // 切断時は通信リストから除去（キック等との兼ね合いのためデータ保持/除去を調整）
+        studentConns = studentConns.filter(c => c !== conn);
+      });
+    });
+  }
+
+  function assignTeamsAuto() {
+    const total = leaderboard.length;
+    if (total === 0) {
+      alert("参加者がいません。");
+      return;
+    }
+
+    const targetTeamSize = parseFloat(document.getElementById('teamSizeSelect').value);
+    const numTeams = Math.max(1, Math.round(total / targetTeamSize));
+    const teamNames = ["チームA", "チームB", "チームC", "チームD", "チームE", "チームF", "チームG", "チームH", "チームI", "チームJ"];
+
+    let shuffledIndices = shuffleArray([...Array(total).keys()]);
+    shuffledIndices.forEach((studentIdx, rankIndex) => {
+      let teamIdx = rankIndex % numTeams;
+      leaderboard[studentIdx].team = teamNames[teamIdx] || `チーム${teamIdx + 1}`;
+    });
+
+    studentConns.forEach(conn => {
+      let user = leaderboard.find(u => u.id === conn.peer);
+      if (user) {
+        conn.send({ type: 'team_assigned', team: user.team });
+      }
+    });
+
+    updateHostUI();
+    alert(`全${total}名を${numTeams}つのチームに分けました！（1チーム約${Math.round(total/numTeams)}名）`);
+  }
+
+  function updateHostUI() {
+    document.getElementById('hostParticipantCount').innerText = leaderboard.length;
+    
+    const finishedUsers = leaderboard.filter(u => u.isFinished);
+    document.getElementById('hostFinishedCount').innerText = finishedUsers.length;
+    document.getElementById('hostTotalCount').innerText = leaderboard.length;
+
+    renderHostIndividualRankingTable('hostRankingBody', leaderboard);
+    renderTeamRankingTable('hostTeamRankingBody', leaderboard);
+  }
+
+  function startHostGame() {
+    leaderboard.forEach(u => {
+      u.score = 0;
+      u.isFinished = false;
+      u.correctCount = 0;
+    });
+    updateHostUI();
+
+    const gameQuestions = generateGameQuestions(questions, QUESTIONS_PER_GAME);
+    studentConns.forEach(conn => {
+      conn.send({ type: 'start_game', questions: gameQuestions });
+    });
+  }
+
+  function broadcastRanking() {
+    studentConns.forEach(conn => {
+      conn.send({ type: 'ranking_update', leaderboard: leaderboard });
+    });
+  }
+
+  function renderHostIndividualRankingTable(tbodyId, dataList) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    let sorted = [...dataList].sort((a, b) => b.score - a.score);
+    sorted.forEach((item, index) => {
+      const statusHtml = item.isFinished 
+        ? `<span class="status-badge status-finished">完了 (${item.correctCount}/${QUESTIONS_PER_GAME})</span>`
+        : `<span class="status-badge status-playing">解答中…</span>`;
+
+      tbody.innerHTML += `<tr><td>${index + 1}</td><td>${item.name}</td><td>${item.team || '未定'}</td><td>${item.score}点</td><td>${statusHtml}</td><td>
+            <button class="btn btn-danger" style="width:auto; padding:2px 8px; font-size:12px; margin:0;" onclick="kickStudent('${item.id}')">退出</button>
+          </td></tr>`;
+    });
+  }
+
+  // 教員が指定した生徒を強制退出させる処理
+  function kickStudent(peerId) {
+    const user = leaderboard.find(u => u.id === peerId);
+    const targetName = user ? user.name : "この生徒";
+
+    if (confirm(`${targetName} さんを退出させますか？`)) {
+      // 該当生徒へキック通知を送信
+      const conn = studentConns.find(c => c.peer === peerId);
+      if (conn) {
+        conn.send({ type: 'kicked' });
+        conn.close();
+      }
+      
+      // 管理側のリストから削除
+      leaderboard = leaderboard.filter(u => u.id !== peerId);
+      studentConns = studentConns.filter(c => c.peer !== peerId);
+      
+      updateHostUI();
+      broadcastRanking();
+    }
+  }
+  
+  // --- 生徒 処理 ---
+  function joinLobby() {
+    myName = document.getElementById('playerName').value.trim();
+    myClass = document.getElementById('classSelect').value;
+    myRoomId = document.getElementById('roomId').value.trim();
+
+    if (!myName || !myRoomId) {
+      alert("名前とルームIDを入力してください。");
+      return;
+    }
+
+    navigateTo('lobbyScreen');
+    if (peer) peer.destroy();
+    peer = new Peer();
+
+    peer.on('open', () => {
+      tryConnectHost();
+    });
+  }
+
+  function tryConnectHost() {
+    if (!peer || peer.destroyed) return;
+
+    document.getElementById('studentStatus').innerText = "教員の準備を待っています... (再接続中)";
+    document.getElementById('studentStatus').style.color = "orange";
+
+    if (hostConn) hostConn.close();
+    hostConn = peer.connect("host-" + myRoomId);
+
+    let isConnected = false;
+
+    hostConn.on('open', () => {
+      isConnected = true;
+      if (retryTimer) clearTimeout(retryTimer);
+
+      document.getElementById('studentStatus').innerText = "接続成功！教員の開始を待っています";
+      document.getElementById('studentStatus').style.color = "green";
+      hostConn.send({ type: 'join', name: myName, class: myClass });
+    });
+
+    hostConn.on('data', (data) => {
+      if (data.type === 'kicked') {
+        alert("教員によって退出させられました。");
+        resetToTop();
+        return;
+      }
+      if (data.type === 'team_assigned') {
+        myTeam = data.team;
+        document.getElementById('myTeamDisplay').innerText = myTeam;
+        document.getElementById('quizTeamDisplay').innerText = myTeam;
+      } else if (data.type === 'start_game') {
+        activeQuestions = data.questions;
+        startQuizGame();
+      } else if (data.type === 'ranking_update') {
+        renderIndividualRankingTable('rankingBody', data.leaderboard);
+        renderTeamRankingTable('teamRankingBody', data.leaderboard);
+      }
+    });
+    
+    setTimeout(() => {
+      if (!isConnected && document.getElementById('lobbyScreen').classList.contains('active')) {
+        retryTimer = setTimeout(tryConnectHost, 2000);
+      }
+    }, 1500);
+  }
+
+  // --- クイズ処理 ---
+  function startSoloMode() {
+    isSoloMode = true;
+    myName = document.getElementById('playerName').value.trim() || "ゲスト";
+    myClass = document.getElementById('classSelect').value;
+    myTeam = "個人";
+    activeQuestions = generateGameQuestions(questions, QUESTIONS_PER_GAME);
+    startQuizGame();
+  }
+
+  function startQuizGame() {
+    currentQuestionIndex = 0;
+    correctAnswersCount = 0;
+    baseScoreTotal = 0;
+    timeBonusTotal = 0;
+    myScore = 0;
+    
+    navigateTo('quizScreen');
+    renderQuestion();
+  }
+
+  function renderQuestion() {
+    if (timerInterval) clearInterval(timerInterval);
+    isAnsweringLocked = false;
+
+    const banner = document.getElementById('feedbackBanner');
+    banner.className = 'feedback-banner';
+    banner.innerText = '';
+
+    const qData = activeQuestions[currentQuestionIndex];
+    document.getElementById('questionProgress').innerText = `第 ${currentQuestionIndex + 1} / ${activeQuestions.length} 問`;
+    document.getElementById('questionText').innerHTML = qData.q;
+
+    const container = document.getElementById('optionsContainer');
+    container.innerHTML = '';
+
+    qData.options.forEach((optText, index) => {
+      const btn = document.createElement('button');
+      btn.className = 'option-btn';
+      btn.id = `opt-btn-${index}`;
+      btn.innerHTML = optText;
+      btn.onclick = () => selectAnswer(index);
+      container.appendChild(btn);
+    });
+
+    updateMathJax();
+
+    timeLeft = QUESTION_TIME_LIMIT;
+    questionStartTime = Date.now();
+    updateTimerUI();
+
+    timerInterval = setInterval(() => {
+      const elapsed = (Date.now() - questionStartTime) / 1000;
+      timeLeft = Math.max(0, QUESTION_TIME_LIMIT - elapsed);
+      updateTimerUI();
+
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        selectAnswer(-1);
+      }
+    }, 100);
+  }
+
+  function updateTimerUI() {
+    document.getElementById('timerText').innerText = `残り時間: ${timeLeft.toFixed(1)}秒`;
+    const percentage = (timeLeft / QUESTION_TIME_LIMIT) * 100;
+    const bar = document.getElementById('timerBar');
+    bar.style.width = percentage + "%";
+
+    if (percentage < 30) {
+      bar.style.backgroundColor = "#f44336";
+    } else {
+      bar.style.backgroundColor = "#ff9800";
+    }
+  }
+
+  function selectAnswer(selectedIndex) {
+    if (isAnsweringLocked) return;
+    isAnsweringLocked = true;
+    if (timerInterval) clearInterval(timerInterval);
+
+    const qData = activeQuestions[currentQuestionIndex];
+    const banner = document.getElementById('feedbackBanner');
+    const correctBtn = document.getElementById(`opt-btn-${qData.answer}`);
+
+    let timeBonus = 0;
+
+    if (selectedIndex === qData.answer) {
+      correctAnswersCount++;
+      baseScoreTotal += 100;
+      timeBonus = Math.round(timeLeft);
+      timeBonusTotal += timeBonus;
+      myScore += (100 + timeBonus);
+
+      if (correctBtn) correctBtn.classList.add('correct');
+      banner.className = 'feedback-banner correct';
+      banner.innerHTML = `⭕ 正解！ +100pt <span style="font-size:13px; font-weight:normal;">(タイムボーナス: +${timeBonus}pt)</span>`;
+    } else {
+      if (selectedIndex >= 0) {
+        const selectedBtn = document.getElementById(`opt-btn-${selectedIndex}`);
+        if (selectedBtn) selectedBtn.classList.add('wrong');
+      }
+      if (correctBtn) correctBtn.classList.add('correct');
+
+      banner.className = 'feedback-banner wrong';
+      if (selectedIndex === -1) {
+        banner.innerText = '⏰ 時間切れ！正解は緑の選択肢です';
+      } else {
+        banner.innerText = '❌ 不正解... 正解は緑の選択肢です';
+      }
+    }
+
+    const isLastQuestion = (currentQuestionIndex + 1 >= activeQuestions.length);
+
+    if (hostConn && !isSoloMode) {
+      hostConn.send({
+        type: 'score_update',
+        score: myScore,
+        isFinished: isLastQuestion,
+        correctCount: correctAnswersCount
+      });
+    }
+
+    setTimeout(() => {
+      currentQuestionIndex++;
+      if (currentQuestionIndex < activeQuestions.length) {
+        renderQuestion();
+      } else {
+        finishGame();
+      }
+    }, 1500);
+  }
+
+  function finishGame() {
+    navigateTo('resultScreen');
+
+    document.getElementById('breakdownTeam').innerText = myTeam;
+    document.getElementById('breakdownCorrectCount').innerText = `${correctAnswersCount} / ${activeQuestions.length} 問`;
+    document.getElementById('breakdownBaseScore').innerText = `${baseScoreTotal} pt`;
+    document.getElementById('breakdownTimeBonus').innerText = `+${timeBonusTotal} pt`;
+    document.getElementById('breakdownTotalScore').innerText = `${myScore} pt`;
+
+    if (isSoloMode) {
+      renderIndividualRankingTable('rankingBody', [{ name: myName, class: myClass, team: myTeam, score: myScore }]);
+      renderTeamRankingTable('teamRankingBody', [{ name: myName, class: myClass, team: myTeam, score: myScore }]);
+    }
+  }
+
+  function renderIndividualRankingTable(tbodyId, dataList) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    let sorted = [...dataList].sort((a, b) => b.score - a.score);
+    sorted.forEach((item, index) => {
+      tbody.innerHTML += `<tr><td>${index + 1}</td><td>${item.name}</td><td>${item.team || '未定'}</td><td>${item.score}点</td></tr>`;
+    });
+  }
+
+  function renderTeamRankingTable(tbodyId, dataList) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const teamStats = {};
+    dataList.forEach(item => {
+      const tName = item.team || "未割り当て";
+      if (!teamStats[tName]) teamStats[tName] = { totalScore: 0, count: 0 };
+      teamStats[tName].totalScore += item.score;
+      teamStats[tName].count += 1;
+    });
+
+    const teamList = Object.keys(teamStats).map(tName => ({
+      name: tName,
+      count: teamStats[tName].count,
+      avgScore: Math.round(teamStats[tName].totalScore / teamStats[tName].count)
+    }));
+
+    teamList.sort((a, b) => b.avgScore - a.avgScore);
+
+    teamList.forEach((team, index) => {
+      tbody.innerHTML += `<tr><td>${index + 1}</td><td><strong>${team.name}</strong></td><td>${team.count}名</td><td>${team.avgScore}点</td></tr>`;
+    });
+  }
+
+  // --- 問題編集 & Excelコピペ & プレビュー機能 ---
+  function toggleEditor(show) {
+    if (show) {
+      renderEditorFields();
+      navigateTo('editorScreen');
+    } else {
+      navigateTo('hostScreen');
+    }
+  }
+
+  function renderEditorFields() {
+    const container = document.getElementById('questionsEditorContainer');
+    container.innerHTML = '';
+
+    questions.forEach((q, idx) => {
+      const card = document.createElement('div');
+      card.className = 'q-edit-card';
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong>問題 ${idx + 1}</strong>
+          <button class="btn btn-danger" style="width:auto; padding:4px 8px; font-size:12px;" onclick="removeQuestion(${idx})">削除</button>
+        </div>
+        
+        <label style="margin-top:6px;">問題文</label>
+        <textarea id="edit-q-${idx}" oninput="updateSinglePreview(${idx})">${q.q}</textarea>
+        
+        <label>選択肢 (4つ)</label>
+        <div class="q-edit-options">
+          <input type="text" id="edit-opt-${idx}-0" value="${q.options[0] || ''}" oninput="updateSinglePreview(${idx})">
+          <input type="text" id="edit-opt-${idx}-1" value="${q.options[1] || ''}" oninput="updateSinglePreview(${idx})">
+          <input type="text" id="edit-opt-${idx}-2" value="${q.options[2] || ''}" oninput="updateSinglePreview(${idx})">
+          <input type="text" id="edit-opt-${idx}-3" value="${q.options[3] || ''}" oninput="updateSinglePreview(${idx})">
+        </div>
+        
+        <label style="margin-top:6px;">正解の選択肢</label>
+        <select id="edit-ans-${idx}" onchange="updateSinglePreview(${idx})">
+          <option value="0" ${q.answer === 0 ? 'selected' : ''}>選択肢 1</option>
+          <option value="1" ${q.answer === 1 ? 'selected' : ''}>選択肢 2</option>
+          <option value="2" ${q.answer === 2 ? 'selected' : ''}>選択肢 3</option>
+          <option value="3" ${q.answer === 3 ? 'selected' : ''}>選択肢 4</option>
+        </select>
+
+        <!-- リアルタイム・プレビュー枠 -->
+        <div class="preview-box">
+          <div class="preview-title">👁️ 表示プレビュー (MathJax描画確認)</div>
+          <div class="preview-q-text" id="prev-q-${idx}">${q.q}</div>
+          <div class="preview-options-grid">
+            <div class="preview-opt-item ${q.answer === 0 ? 'is-correct' : ''}" id="prev-opt-${idx}-0">${q.options[0] || ''}</div>
+            <div class="preview-opt-item ${q.answer === 1 ? 'is-correct' : ''}" id="prev-opt-${idx}-1">${q.options[1] || ''}</div>
+            <div class="preview-opt-item ${q.answer === 2 ? 'is-correct' : ''}" id="prev-opt-${idx}-2">${q.options[2] || ''}</div>
+            <div class="preview-opt-item ${q.answer === 3 ? 'is-correct' : ''}" id="prev-opt-${idx}-3">${q.options[3] || ''}</div>
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+
+    updateMathJax();
+  }
+
+  // 単一カードのプレビュー更新
+  function updateSinglePreview(idx) {
+    const qVal = document.getElementById(`edit-q-${idx}`).value;
+    const opt0 = document.getElementById(`edit-opt-${idx}-0`).value;
+    const opt1 = document.getElementById(`edit-opt-${idx}-1`).value;
+    const opt2 = document.getElementById(`edit-opt-${idx}-2`).value;
+    const opt3 = document.getElementById(`edit-opt-${idx}-3`).value;
+    const ansVal = parseInt(document.getElementById(`edit-ans-${idx}`).value, 10);
+
+    const prevQ = document.getElementById(`prev-q-${idx}`);
+    if (prevQ) prevQ.innerHTML = qVal;
+
+    for (let i = 0; i < 4; i++) {
+      const prevOpt = document.getElementById(`prev-opt-${idx}-${i}`);
+      if (prevOpt) {
+        prevOpt.innerHTML = [opt0, opt1, opt2, opt3][i];
+        if (i === ansVal) {
+          prevOpt.classList.add('is-correct');
+        } else {
+          prevOpt.classList.remove('is-correct');
+        }
+      }
+    }
+
+    updateMathJax();
+  }
+
+  function importFromExcelPaste() {
+    const pasteText = document.getElementById('excelPasteArea').value.trim();
+    if (!pasteText) {
+      alert("貼り付けエリアにテキストを入力してください。");
+      return;
+    }
+
+    const lines = pasteText.split('\n');
+    const importedQuestions = [];
+
+    lines.forEach((line) => {
+      let trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      let cols = trimmedLine.split('\t');
+      if (cols.length < 6) cols = trimmedLine.split(',');
+      if (cols.length < 6) cols = trimmedLine.split('|');
+
+      if (cols.length >= 6) {
+        let qText = cols[0].trim();
+        let opt1 = cols[1].trim();
+        let opt2 = cols[2].trim();
+        let opt3 = cols[3].trim();
+        let opt4 = cols[4].trim();
+        let ansRaw = cols[5].trim();
+
+        if (qText.includes("問題文") || ansRaw.includes("正解")) return;
+
+        let ansIndex = 0;
+        let parsedAns = parseInt(ansRaw, 10);
+        if (!isNaN(parsedAns)) {
+          ansIndex = (parsedAns >= 1 && parsedAns <= 4) ? parsedAns - 1 : parsedAns;
+        }
+
+        importedQuestions.push({
+          q: qText,
+          options: [opt1, opt2, opt3, opt4],
+          answer: Math.max(0, Math.min(3, ansIndex))
+        });
+      }
+    });
+
+    if (importedQuestions.length > 0) {
+      questions = importedQuestions;
+      saveToLocalStorage();
+      renderEditorFields();
+      document.getElementById('excelPasteArea').value = '';
+      alert(`${importedQuestions.length}件の問題を取り込み、ブラウザに保存しました！`);
+    } else {
+      alert("フォーマットを読み取れませんでした。[問題文] [選択肢1] [選択肢2] [選択肢3] [選択肢4] [正解(1~4)] の6列があるか確認してください。");
+    }
+  }
+
+  function addNewQuestionField() {
+    questions.push({ q: "新しい問題文", options: ["1", "2", "3", "4"], answer: 0 });
+    renderEditorFields();
+  }
+
+  function removeQuestion(idx) {
+    questions.splice(idx, 1);
+    renderEditorFields();
+  }
+
+  function saveEditedQuestions() {
+    const newQuestions = [];
+    for (let idx = 0; idx < questions.length; idx++) {
+      newQuestions.push({
+        q: document.getElementById(`edit-q-${idx}`).value,
+        options: [
+          document.getElementById(`edit-opt-${idx}-0`).value,
+          document.getElementById(`edit-opt-${idx}-1`).value,
+          document.getElementById(`edit-opt-${idx}-2`).value,
+          document.getElementById(`edit-opt-${idx}-3`).value
+        ],
+        answer: parseInt(document.getElementById(`edit-ans-${idx}`).value, 10)
+      });
+    }
+    questions = newQuestions;
+    saveToLocalStorage();
+    alert("問題セットを保存しました。");
+    navigateTo('hostScreen');
+  }
+
+  function exportQuestionsJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(questions, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "questions.json");
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+  }
+
+  function importQuestionsJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const imported = JSON.parse(e.target.result);
+        if (Array.isArray(imported)) {
+          questions = imported;
+          saveToLocalStorage();
+          alert("問題セットを正常に読み込みました。");
+        }
+      } catch (err) {
+        alert("ファイルの解析に失敗しました。");
+      }
+    };
+    reader.readAsText(file);
+  }
+</script>
+
+</body>
+</html>
